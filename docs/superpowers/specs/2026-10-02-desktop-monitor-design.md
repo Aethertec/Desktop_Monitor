@@ -1,7 +1,7 @@
 # Desktop Monitor — design spec
 
 Date: 2026-10-02
-Status: awaiting review
+Status: approved 2026-10-02
 
 ## 1. Goal
 
@@ -83,7 +83,7 @@ All available without admin on the target machine (verified 2026-10-02).
 | Net ↓ / ↑ | `NetworkInterface.GetAllNetworkInterfaces()`, sum of `BytesReceived` / `BytesSent` over interfaces that are Up and not Loopback/Tunnel; delta ÷ elapsed (Stopwatch) | 1 s |
 | Battery | `SystemInformation.PowerStatus` (`BatteryLifePercent`, `PowerLineStatus`) | 10 s |
 | Disk C: | `DriveInfo("C")` total vs free | 60 s |
-| Temperatures | PerformanceCounter `Thermal Zone Information` / `High Precision Temperature` (tenths of K), falling back to `Temperature` (K). Instance matched case-insensitively by suffix: CPU = `CPUZ`, skin = `SK1Z`, battery = `BATZ` (configurable). °C = K − 273.15. A reading ≤ 0 °C or > 150 °C is treated as unavailable. | 2 s |
+| Temperatures | PerformanceCounter `Thermal Zone Information` / `High Precision Temperature` (tenths of K), falling back to `Temperature` (K). Instance matched case-insensitively by suffix: CPU = `CPUZ`, skin = `SK1Z`, battery = `BATZ` (configurable). °C = K − 273.2 (ACPI convention: an empty zone reads exactly 273.2 K). A reading ≤ 0 °C or > 150 °C is treated as unavailable. | 2 s |
 
 Zones `PCHZ` and `SK2Z` read empty on this machine and are not used.
 
