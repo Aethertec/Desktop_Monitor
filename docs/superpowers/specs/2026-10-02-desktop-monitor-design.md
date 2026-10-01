@@ -1,7 +1,7 @@
 # Desktop Monitor — design spec
 
 Date: 2026-10-02
-Status: approved 2026-10-02
+Status: implemented 2026-10-02 (see spike/RESULT.md for the pinning mode)
 
 ## 1. Goal
 
