@@ -14,6 +14,7 @@ namespace DesktopMonitor.Tests
             Log.FilePath = Path.Combine(Path.GetTempPath(), "DesktopMonitorTests.log");
             RulesTests.Run();
             SettingsTests.Run();
+            TrayGlyphTests.Run();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
             return _failed == 0 ? 0 : 1;
         }

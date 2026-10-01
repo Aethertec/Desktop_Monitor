@@ -35,7 +35,7 @@ function Compile([string]$target, [string]$out, [string[]]$sources, [string[]]$e
 $pure = @(@('src\Rules.cs', 'src\Settings.cs', 'src\Log.cs') | Where-Object { Test-Path (Join-Path $root $_) })
 
 if ($Test) {
-    Compile 'exe' 'Tests.exe' (@('tests\*.cs') + $pure)
+    Compile 'exe' 'Tests.exe' (@('tests\*.cs', 'src\TrayIcon.cs', 'src\Snapshot.cs', 'src\Native.cs') + $pure)
     & (Join-Path $bin 'Tests.exe')
     exit $LASTEXITCODE
 }
