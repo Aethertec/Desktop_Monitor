@@ -1,0 +1,127 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+
+namespace DesktopMonitor
+{
+    public enum Level { Unknown, Ok, Amber, Red }
+
+    public struct Box
+    {
+        public double X, Y, W, H;
+
+        public Box(double x, double y, double w, double h)
+        {
+            X = x; Y = y; W = w; H = h;
+        }
+    }
+
+    // Pure rules shared by the card, tray icon and sampler: thresholds, unit conversion, formatting, placement.
+    public static class Rules
+    {
+        // Rounds the way every number on the card is displayed, so colour and text always agree.
+        public static double Display(double v)
+        {
+            return Math.Round(v, MidpointRounding.AwayFromZero);
+        }
+
+        public static Level Classify(double? value, double amber, double red)
+        {
+            if (!value.HasValue) return Level.Unknown;
+            double v = Display(value.Value);
+            if (v >= red) return Level.Red;
+            if (v >= amber) return Level.Amber;
+            return Level.Ok;
+        }
+
+        // ACPI thermal zones report Kelvin with 273.2 K as 0 °C ("High Precision Temperature" in tenths of Kelvin).
+        // A zone without a sensor reads exactly 273.2 K, so anything at or below 0 °C or above 150 °C is not a reading.
+        public static double? ThermalToCelsius(double raw, bool tenthsOfKelvin)
+        {
+            double c = (tenthsOfKelvin ? raw / 10.0 : raw) - 273.2;
+            if (double.IsNaN(c) || c <= 0 || c > 150) return null;
+            return c;
+        }
+
+        public static double ClampPercent(double v)
+        {
+            if (double.IsNaN(v) || v < 0) return 0;
+            return v > 100 ? 100 : v;
+        }
+
+        public static double? Percent(double part, double whole)
+        {
+            if (whole <= 0 || double.IsNaN(part) || part < 0) return null;
+            return ClampPercent(part / whole * 100.0);
+        }
+
+        // Bytes per second from two cumulative counters; null when the total went backwards (adapter reset) or no time passed.
+        public static double? Rate(long previous, long current, double seconds)
+        {
+            if (seconds <= 0 || current < previous) return null;
+            return (current - previous) / seconds;
+        }
+
+        // PowerStatus.BatteryLifePercent is 0..1, or 2.55 when the charge is unknown.
+        public static double? BatteryPercent(float lifePercent)
+        {
+            if (float.IsNaN(lifePercent) || lifePercent < 0 || lifePercent > 1) return null;
+            return Display(lifePercent * 100.0);
+        }
+
+        public static double TempRingFraction(double? celsius, double min, double max)
+        {
+            if (!celsius.HasValue || max <= min) return 0;
+            double f = (celsius.Value - min) / (max - min);
+            return f < 0 ? 0 : (f > 1 ? 1 : f);
+        }
+
+        public static string FormatNumber(double? v)
+        {
+            return v.HasValue ? Display(v.Value).ToString(CultureInfo.InvariantCulture) : "--";
+        }
+
+        public static string FormatPercent(double? v)
+        {
+            return v.HasValue ? FormatNumber(v) + "%" : "--";
+        }
+
+        public static string FormatTemp(double? celsius, bool withUnit)
+        {
+            return celsius.HasValue ? FormatNumber(celsius) + (withUnit ? "\u00B0C" : "\u00B0") : "--";
+        }
+
+        // KB/s (1 KB = 1024 bytes) below 1000 KB/s, otherwise MB/s with one decimal.
+        public static string FormatSpeed(double? bytesPerSecond)
+        {
+            if (!bytesPerSecond.HasValue) return "--";
+            double kb = bytesPerSecond.Value / 1024.0;
+            if (Display(kb) < 1000) return Display(kb).ToString(CultureInfo.InvariantCulture) + " KB/s";
+            return (kb / 1024.0).ToString("0.0", CultureInfo.InvariantCulture) + " MB/s";
+        }
+
+        public static string Tooltip(double? cpuPercent, double? cpuTempC)
+        {
+            return "CPU " + FormatPercent(cpuPercent) + " \u00B7 " + FormatTemp(cpuTempC, true);
+        }
+
+        // True when at least half of the card's area lies inside a single work area.
+        public static bool IsMostlyOnScreen(Box card, IList<Box> workAreas)
+        {
+            double area = card.W * card.H;
+            if (area <= 0) return false;
+            foreach (Box wa in workAreas)
+            {
+                double w = Math.Min(card.X + card.W, wa.X + wa.W) - Math.Max(card.X, wa.X);
+                double h = Math.Min(card.Y + card.H, wa.Y + wa.H) - Math.Max(card.Y, wa.Y);
+                if (w > 0 && h > 0 && w * h >= area / 2) return true;
+            }
+            return false;
+        }
+
+        public static Box DefaultPlacement(Box workArea, double cardW, double cardH, double margin)
+        {
+            return new Box(workArea.X + workArea.W - cardW - margin, workArea.Y + margin, cardW, cardH);
+        }
+    }
+}
