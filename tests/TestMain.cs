@@ -9,12 +9,14 @@ namespace DesktopMonitor.Tests
     {
         private static int _passed, _failed;
 
+        [STAThread]
         private static int Main()
         {
             Log.FilePath = Path.Combine(Path.GetTempPath(), "DesktopMonitorTests.log");
             RulesTests.Run();
             SettingsTests.Run();
             TrayGlyphTests.Run();
+            SafeTimerTests.Run();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
             return _failed == 0 ? 0 : 1;
         }

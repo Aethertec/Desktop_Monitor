@@ -49,7 +49,9 @@ namespace DesktopMonitor
             var raw = root as Dictionary<string, object>;
             if (raw == null) throw new FormatException("settings.json must contain a JSON object");
 
-            var map = new Dictionary<string, object>(raw, StringComparer.OrdinalIgnoreCase);
+            // Copied one by one: the dictionary constructor throws when two keys differ only in case; here the last one wins.
+            var map = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, object> kv in raw) map[kv.Key] = kv.Value;
             var d = new AppSettings();
             var s = new AppSettings();
             s.X = NullableNumber(map, "x");
@@ -203,7 +205,13 @@ namespace DesktopMonitor
                     Log.Write("Settings: ignored invalid edit, " + ex.Message);
                     return;
                 }
+                catch (Exception ex) // runs on a timer thread, where anything unhandled would end the process
+                {
+                    Log.Write("Settings: reload failed, " + ex.GetType().Name + ": " + ex.Message);
+                    return;
+                }
             }
+            Log.Write("Settings: reload skipped, settings.json stayed locked");
         }
 
         public void Dispose()

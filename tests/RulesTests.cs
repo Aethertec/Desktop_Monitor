@@ -10,7 +10,7 @@ namespace DesktopMonitor.Tests
             Classify_UsesTheDisplayedRounding();
             ThermalToCelsius_ConvertsAndRejectsEmptyZones();
             Percent_And_Clamp();
-            Rate_RejectsCountersThatGoBackwards();
+            AdapterRate_CountsOnlyAdaptersSeenInBothSamples();
             BatteryPercent_RejectsUnknownCharge();
             TempRingFraction_MapsAndClamps();
             Formatting();
@@ -65,12 +65,27 @@ namespace DesktopMonitor.Tests
             TestMain.Near(0, Rules.ClampPercent(double.NaN), "NaN clamps to 0");
         }
 
-        // Review focus 3: Wi-Fi switch or VPN toggle makes the byte totals drop; no negative or huge speed.
-        private static void Rate_RejectsCountersThatGoBackwards()
+        // Review focus 3 + final review 3: adapters joining, leaving or resetting must never show a negative or absurd speed.
+        private static void AdapterRate_CountsOnlyAdaptersSeenInBothSamples()
         {
-            TestMain.Near(1000, Rules.Rate(1000, 3000, 2.0), "2000 bytes in 2 s");
-            TestMain.Equal<double?>(null, Rules.Rate(5000, 1000, 1.0), "total went backwards");
-            TestMain.Equal<double?>(null, Rules.Rate(0, 100, 0), "no time elapsed");
+            TestMain.Near(1000, Rules.AdapterRate(Bytes("wifi", 1000), Bytes("wifi", 3000), 2.0), "steady traffic, 2000 bytes in 2 s");
+            var rejoined = Bytes("wifi", 2000);
+            rejoined["eth"] = 1796484081;
+            TestMain.Near(1000, Rules.AdapterRate(Bytes("wifi", 1000), rejoined, 1.0), "adapter reappearing with 1.7 GB lifetime total adds nothing");
+            var withVpn = Bytes("wifi", 1000);
+            withVpn["vpn"] = 5000;
+            TestMain.Near(500, Rules.AdapterRate(withVpn, Bytes("wifi", 1500), 1.0), "adapter disappearing is ignored");
+            TestMain.Near(0, Rules.AdapterRate(Bytes("wifi", 5000), Bytes("wifi", 100), 1.0), "adapter counter reset counts as 0");
+            TestMain.Equal<double?>(null, Rules.AdapterRate(Bytes("wifi", 5000), Bytes("eth", 9000), 1.0), "Wi-Fi to Ethernet switch shows -- for one tick");
+            TestMain.Equal<double?>(null, Rules.AdapterRate(null, Bytes("wifi", 100), 1.0), "no baseline yet");
+            TestMain.Equal<double?>(null, Rules.AdapterRate(Bytes("wifi", 0), Bytes("wifi", 100), 0), "no time elapsed");
+        }
+
+        private static Dictionary<string, long> Bytes(string adapter, long total)
+        {
+            var d = new Dictionary<string, long>();
+            d[adapter] = total;
+            return d;
         }
 
         // Review focus 5: unknown charge (255 %) must show "--".

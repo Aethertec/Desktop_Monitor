@@ -10,6 +10,7 @@ namespace DesktopMonitor.Tests
             Parse_EmptyObjectGivesDefaults();
             Parse_ReadsEveryKey();
             Parse_KeysAreCaseInsensitive();
+            Parse_DuplicateKeysDifferingInCase_LastWins();
             Parse_WrongTypeFallsBackToDefault();
             Parse_ClampsOutOfRangeNumbers();
             Parse_InvertedRingRangeUsesDefaults();
@@ -65,6 +66,23 @@ namespace DesktopMonitor.Tests
             AppSettings s = SettingsStore.Parse(@"{""TempAmber"": 78, ""ZONECPU"": ""LOCZ""}");
             TestMain.Near(78, s.TempAmber, "TempAmber");
             TestMain.Equal("LOCZ", s.ZoneCpu, "ZONECPU");
+        }
+
+        // Final review 1: "opacity" plus "Opacity" threw ArgumentException, which escaped the watcher's timer and killed the app.
+        private static void Parse_DuplicateKeysDifferingInCase_LastWins()
+        {
+            AppSettings s;
+            try
+            {
+                s = SettingsStore.Parse(@"{""opacity"": 0.8, ""Opacity"": 0.5, ""tempAmber"": 78}");
+            }
+            catch (Exception ex)
+            {
+                TestMain.True(false, "duplicate keys differing in case must not throw (got " + ex.GetType().Name + ")");
+                return;
+            }
+            TestMain.Near(0.5, s.Opacity, "last duplicate wins");
+            TestMain.Near(78, s.TempAmber, "other keys still read");
         }
 
         // Review focus 2: a typo in one key must not reset or break the others.

@@ -55,11 +55,22 @@ namespace DesktopMonitor
             return ClampPercent(part / whole * 100.0);
         }
 
-        // Bytes per second from two cumulative counters; null when the total went backwards (adapter reset) or no time passed.
-        public static double? Rate(long previous, long current, double seconds)
+        // Bytes per second from per-adapter cumulative counters. Only adapters present in both samples count, so an adapter
+        // that just (re)appeared never shows its lifetime total as one second of traffic; a counter that went backwards adds 0.
+        // Null when there is no baseline, no time passed, or no adapter is common to both samples.
+        public static double? AdapterRate(IDictionary<string, long> previous, IDictionary<string, long> current, double seconds)
         {
-            if (seconds <= 0 || current < previous) return null;
-            return (current - previous) / seconds;
+            if (previous == null || current == null || seconds <= 0) return null;
+            long sum = 0;
+            bool common = false;
+            foreach (KeyValuePair<string, long> adapter in current)
+            {
+                long before;
+                if (!previous.TryGetValue(adapter.Key, out before)) continue;
+                common = true;
+                if (adapter.Value >= before) sum += adapter.Value - before;
+            }
+            return common ? sum / seconds : (double?)null;
         }
 
         // PowerStatus.BatteryLifePercent is 0..1, or 2.55 when the charge is unknown.

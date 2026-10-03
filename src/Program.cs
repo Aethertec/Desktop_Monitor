@@ -42,7 +42,7 @@ namespace DesktopMonitor
         private MetricsSampler _sampler;
         private TrayIcon _tray;
         private CardWindow _window;
-        private DispatcherTimer _timer;
+        private SafeTimer _timer;
         private bool _exiting;
 
         public void Start()
@@ -63,10 +63,9 @@ namespace DesktopMonitor
                 Log.Write("Settings: live reload unavailable, " + ex.Message);
             }
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
-            _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            _timer.Tick += delegate { Tick(); };
+            _timer = new SafeTimer(TimeSpan.FromSeconds(1), "Tick", Tick);
             _timer.Start();
-            Tick();
+            _timer.RunNow();
         }
 
         private void ShowCard()

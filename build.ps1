@@ -35,12 +35,12 @@ function Compile([string]$target, [string]$out, [string[]]$sources, [string[]]$e
 $pure = @(@('src\Rules.cs', 'src\Settings.cs', 'src\Log.cs') | Where-Object { Test-Path (Join-Path $root $_) })
 
 if ($Test) {
-    Compile 'exe' 'Tests.exe' (@('tests\*.cs', 'src\TrayIcon.cs', 'src\Snapshot.cs', 'src\Native.cs') + $pure)
+    Compile 'exe' 'Tests.exe' (@('tests\*.cs', 'src\TrayIcon.cs', 'src\Snapshot.cs', 'src\Native.cs', 'src\SafeTimer.cs') + $pure)
     & (Join-Path $bin 'Tests.exe')
     exit $LASTEXITCODE
 }
 elseif ($Spike) {
-    Compile 'winexe' 'PinSpike.exe' @('spike\PinSpike.cs', 'src\DesktopPin.cs', 'src\Native.cs', 'src\Log.cs')
+    Compile 'winexe' 'PinSpike.exe' @('spike\PinSpike.cs', 'src\DesktopPin.cs', 'src\Native.cs', 'src\Log.cs', 'src\SafeTimer.cs')
 }
 elseif ($Dump) {
     Compile 'exe' 'SamplerDump.exe' (@('tools\SamplerDump.cs', 'src\MetricsSampler.cs', 'src\Snapshot.cs', 'src\Native.cs') + $pure)

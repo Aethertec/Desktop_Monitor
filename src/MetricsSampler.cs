@@ -22,7 +22,7 @@ namespace DesktopMonitor
 
         private PerformanceCounter _cpu;
         private Dictionary<string, CounterSample> _gpuPrev;
-        private long _rxPrev, _txPrev;
+        private Dictionary<string, long> _rxPrev, _txPrev; // per adapter Id
         private double _netPrevAt = -1;
 
         private PerformanceCounter _tCpu, _tSkin, _tBattery;
@@ -154,19 +154,20 @@ namespace DesktopMonitor
         {
             try
             {
-                long rx = 0, tx = 0;
+                var rx = new Dictionary<string, long>();
+                var tx = new Dictionary<string, long>();
                 foreach (NetworkInterface ni in NetworkInterface.GetAllNetworkInterfaces())
                 {
                     if (ni.OperationalStatus != OperationalStatus.Up) continue;
                     if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback || ni.NetworkInterfaceType == NetworkInterfaceType.Tunnel) continue;
                     IPInterfaceStatistics st = ni.GetIPStatistics();
-                    rx += st.BytesReceived;
-                    tx += st.BytesSent;
+                    rx[ni.Id] = st.BytesReceived;
+                    tx[ni.Id] = st.BytesSent;
                 }
                 if (_netPrevAt >= 0)
                 {
-                    s.DownBytesPerSec = Rules.Rate(_rxPrev, rx, now - _netPrevAt);
-                    s.UpBytesPerSec = Rules.Rate(_txPrev, tx, now - _netPrevAt);
+                    s.DownBytesPerSec = Rules.AdapterRate(_rxPrev, rx, now - _netPrevAt);
+                    s.UpBytesPerSec = Rules.AdapterRate(_txPrev, tx, now - _netPrevAt);
                 }
                 _rxPrev = rx;
                 _txPrev = tx;

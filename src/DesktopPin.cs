@@ -12,7 +12,7 @@ namespace DesktopMonitor
         private readonly IntPtr _hwnd;
         private readonly bool _useOwner;
         private readonly uint _taskbarCreated;
-        private readonly DispatcherTimer _watchdog;
+        private readonly SafeTimer _watchdog;
         private IntPtr _host;
 
         public DesktopPin(IntPtr hwnd, bool useOwner)
@@ -21,12 +21,11 @@ namespace DesktopMonitor
             _useOwner = useOwner;
             _taskbarCreated = Native.RegisterWindowMessage("TaskbarCreated");
             HwndSource.FromHwnd(hwnd).AddHook(WndProc);
-            _watchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-            _watchdog.Tick += delegate
+            // Covers Explorer not being ready at login and a missed TaskbarCreated broadcast.
+            _watchdog = new SafeTimer(TimeSpan.FromSeconds(5), "DesktopPin watchdog", delegate
             {
-                // Covers Explorer not being ready at login and a missed TaskbarCreated broadcast.
                 if (_useOwner && !Native.IsWindow(_host)) Attach();
-            };
+            });
             _watchdog.Start();
         }
 

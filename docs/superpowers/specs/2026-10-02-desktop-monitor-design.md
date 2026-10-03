@@ -1,7 +1,7 @@
 # Desktop Monitor — design spec
 
 Date: 2026-10-02
-Status: implemented 2026-10-02 (see spike/RESULT.md for the pinning mode)
+Status: implemented 2026-10-02 (see spike/RESULT.md for the pinning mode). Open: sleep/resume check, start-with-Windows reboot check; working set measured 110 MB against the < 50 MB target (decision pending).
 
 ## 1. Goal
 
