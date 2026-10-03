@@ -18,6 +18,7 @@ namespace DesktopMonitor.Tests
             Expired_OnlyDailyFilesOlderThanRetention();
             Writer_WritesTheHeaderOnce();
             Writer_KeepsRowsWhileTheFileIsLocked();
+            Writer_MarksNewFilesAsUtf8ForExcel();
         }
 
         private static Snapshot S(DateTime t, double cpu, double temp)
@@ -122,6 +123,28 @@ namespace DesktopMonitor.Tests
                 string[] lines = File.ReadAllLines(Path.Combine(dir, "2026-10-03.csv"));
                 TestMain.Equal(3, lines.Length, "header plus two rows");
                 TestMain.Equal(CsvLog.Header, lines[0], "header first");
+            }
+            finally
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
+
+        // Found in Task 11: without a byte-order mark, Excel and PowerShell on a code-page-932 Windows read "95°C" in
+        // alerts.csv as "95ﾂｰC". New files must start with the UTF-8 BOM, written once.
+        private static void Writer_MarksNewFilesAsUtf8ForExcel()
+        {
+            string dir = TempDir();
+            try
+            {
+                var writer = new CsvLogWriter(dir);
+                writer.AppendAlert(new Alert { Time = T0, Kind = "cpu_hot", Title = "CPU hot", Body = "95°C for 1 min" });
+                writer.AppendAlert(new Alert { Time = T0.AddMinutes(5), Kind = "cpu_hot", Title = "CPU hot", Body = "96°C for 1 min" });
+                byte[] bytes = File.ReadAllBytes(Path.Combine(dir, "alerts.csv"));
+                TestMain.True(bytes.Length > 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF, "alerts.csv starts with the UTF-8 BOM");
+                string text = System.Text.Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
+                TestMain.True(text.IndexOf('﻿') < 0, "the BOM is written once, not before every row");
+                TestMain.True(text.Contains("95°C") && text.Contains("96°C"), "the degree sign survives");
             }
             finally
             {

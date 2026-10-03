@@ -203,7 +203,7 @@ namespace DesktopMonitor
             {
                 Directory.CreateDirectory(_dir);
                 var text = new StringBuilder();
-                if (!File.Exists(path)) text.Append(header).Append("\r\n");
+                if (!File.Exists(path)) text.Append('﻿').Append(header).Append("\r\n"); // BOM: Excel then reads it as UTF-8
                 foreach (string r in queue) text.Append(r).Append("\r\n");
                 File.AppendAllText(path, text.ToString(), new UTF8Encoding(false));
                 queue.Clear();
