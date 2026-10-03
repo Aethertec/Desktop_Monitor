@@ -21,6 +21,7 @@ namespace DesktopMonitor.Tests
             HistoryThrottleTests.Run();
             RulesV2Tests.Run();
             ProcessTableTests.Run();
+            ComPortsTests.Run();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
             return _failed == 0 ? 0 : 1;
         }
