@@ -21,10 +21,15 @@ namespace DesktopMonitor
 
         public event Action UnlockToggled;
         public event Action ExitRequested;
+        public event Action DetailsRequested;
 
         public TrayIcon(string settingsPath)
         {
             _settingsPath = settingsPath;
+            var details = new ToolStripMenuItem("Details", null, delegate { Raise(DetailsRequested); });
+            details.Font = new Font(details.Font, FontStyle.Bold); // the default action, as on a double-click
+            _menu.Items.Add(details);
+            _icon.MouseDoubleClick += (s, e) => { if (e.Button == MouseButtons.Left) Raise(DetailsRequested); };
             _unlock = new ToolStripMenuItem("Unlock to move", null, delegate { Raise(UnlockToggled); });
             _autostart = new ToolStripMenuItem("Start with Windows", null, delegate { ToggleAutostart(); });
             _menu.Items.Add(_unlock);
@@ -42,6 +47,12 @@ namespace DesktopMonitor
         public void SetUnlocked(bool unlocked)
         {
             _unlock.Text = unlocked ? "Lock position" : "Unlock to move";
+        }
+
+        // Windows 11 shows this as a notification and holds it back during Do Not Disturb.
+        public void ShowAlert(Alert a)
+        {
+            _icon.ShowBalloonTip(5000, a.Title, string.IsNullOrEmpty(a.Body) ? " " : a.Body, ToolTipIcon.None);
         }
 
         public void Update(Snapshot s, AppSettings st)
