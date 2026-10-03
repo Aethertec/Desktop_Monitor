@@ -3,7 +3,9 @@
 #   build.ps1 -Test    -> bin\Tests.exe, then runs it (exit code 1 when any test fails)
 #   build.ps1 -Spike   -> bin\PinSpike.exe (desktop-layer experiment)
 #   build.ps1 -Dump    -> bin\SamplerDump.exe (prints live readings)
-param([switch]$Test, [switch]$Spike, [switch]$Dump)
+#   build.ps1 -Power   -> bin\PowerModeTool.exe (reads or sets the Windows power mode)
+# Tests and tools compile all of src\ and pick their own entry point with /main.
+param([switch]$Test, [switch]$Spike, [switch]$Dump, [switch]$Power)
 $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
@@ -21,7 +23,8 @@ $refs = @(
     (Join-Path $fw 'System.Xaml.dll'),
     (Join-Path $fw 'System.Windows.Forms.dll'),
     (Join-Path $fw 'System.Drawing.dll'),
-    (Join-Path $fw 'System.Web.Extensions.dll')
+    (Join-Path $fw 'System.Web.Extensions.dll'),
+    (Join-Path $fw 'System.Management.dll')
 ) | ForEach-Object { '/r:' + $_ }
 
 function Compile([string]$target, [string]$out, [string[]]$sources, [string[]]$extra = @()) {
@@ -31,20 +34,22 @@ function Compile([string]$target, [string]$out, [string[]]$sources, [string[]]$e
     Write-Output "Built bin\$out"
 }
 
-# Pure files shared by tests and tools; only those that exist yet are included.
-$pure = @(@('src\Rules.cs', 'src\Settings.cs', 'src\Log.cs') | Where-Object { Test-Path (Join-Path $root $_) })
+$app = @('src\*.cs')
 
 if ($Test) {
-    Compile 'exe' 'Tests.exe' (@('tests\*.cs', 'src\TrayIcon.cs', 'src\Snapshot.cs', 'src\Native.cs', 'src\SafeTimer.cs') + $pure)
+    Compile 'exe' 'Tests.exe' (@('tests\*.cs') + $app) @('/main:DesktopMonitor.Tests.TestMain')
     & (Join-Path $bin 'Tests.exe')
     exit $LASTEXITCODE
 }
 elseif ($Spike) {
-    Compile 'winexe' 'PinSpike.exe' @('spike\PinSpike.cs', 'src\DesktopPin.cs', 'src\Native.cs', 'src\Log.cs', 'src\SafeTimer.cs')
+    Compile 'winexe' 'PinSpike.exe' (@('spike\PinSpike.cs') + $app) @('/main:DesktopMonitor.PinSpike')
 }
 elseif ($Dump) {
-    Compile 'exe' 'SamplerDump.exe' (@('tools\SamplerDump.cs', 'src\MetricsSampler.cs', 'src\Snapshot.cs', 'src\Native.cs') + $pure)
+    Compile 'exe' 'SamplerDump.exe' (@('tools\SamplerDump.cs') + $app) @('/main:DesktopMonitor.SamplerDump')
+}
+elseif ($Power) {
+    Compile 'exe' 'PowerModeTool.exe' (@('tools\PowerModeTool.cs') + $app) @('/main:DesktopMonitor.PowerModeTool')
 }
 else {
-    Compile 'winexe' 'DesktopMonitor.exe' @('src\*.cs') @("/win32manifest:$(Join-Path $root 'app.manifest')")
+    Compile 'winexe' 'DesktopMonitor.exe' $app @("/win32manifest:$(Join-Path $root 'app.manifest')")
 }
