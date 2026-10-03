@@ -4,10 +4,11 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using Microsoft.Win32;
 
 namespace DesktopMonitor
 {
-    // Borderless transparent window hosting the card (spec section 5): click-through while locked,
+    // Borderless transparent window hosting the card (v1 spec section 5): click-through while locked,
     // draggable while unlocked, pinned to the desktop layer.
     internal sealed class CardWindow : Window
     {
@@ -37,11 +38,19 @@ namespace DesktopMonitor
             _card.MouseLeftButtonDown += OnCardMouseDown;
             Place(settings);
             SourceInitialized += OnSourceInitialized;
+            SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+            Closed += delegate
+            {
+                SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+                if (_pin != null) _pin.Stop(); // a recreated card must not leave the old watchdog running
+            };
         }
 
         public CardView Card { get { return _card; } }
 
         public bool Unlocked { get { return _card.Unlocked; } }
+
+        public Box Bounds { get { return new Box(Left, Top, CardView.CardWidth, CardView.CardHeight(_card.Unlocked)); } }
 
         public void ApplySettings(AppSettings settings)
         {
@@ -55,6 +64,29 @@ namespace DesktopMonitor
             SetClickThrough(!unlocked);
             Action<bool> handler = UnlockedChanged;
             if (handler != null) handler(unlocked);
+        }
+
+        // Work areas of all screens in DIPs (the app is system-DPI aware).
+        public static List<Box> WorkAreas()
+        {
+            double scale = SystemDpiScale();
+            var areas = new List<Box>();
+            foreach (System.Windows.Forms.Screen screen in System.Windows.Forms.Screen.AllScreens)
+            {
+                System.Drawing.Rectangle r = screen.WorkingArea;
+                areas.Add(new Box(r.X / scale, r.Y / scale, r.Width / scale, r.Height / scale));
+            }
+            return areas;
+        }
+
+        // The work area holding the centre of `b`, or the primary one.
+        public static Box WorkAreaContaining(Box b)
+        {
+            double cx = b.X + b.W / 2, cy = b.Y + b.H / 2;
+            foreach (Box wa in WorkAreas())
+                if (cx >= wa.X && cx < wa.X + wa.W && cy >= wa.Y && cy < wa.Y + wa.H) return wa;
+            Rect p = SystemParameters.WorkArea;
+            return new Box(p.X, p.Y, p.Width, p.Height);
         }
 
         private void OnSourceInitialized(object sender, EventArgs e)
@@ -92,17 +124,24 @@ namespace DesktopMonitor
             SetUnlocked(false);
         }
 
+        // A projector unplugged or a resolution change while running: bring the card back on screen without
+        // overwriting the saved position, so it returns there when the old display comes back and the app restarts.
+        private void OnDisplaySettingsChanged(object sender, EventArgs e)
+        {
+            Dispatcher.BeginInvoke(new Action(delegate
+            {
+                if (Rules.IsMostlyOnScreen(Bounds, WorkAreas())) return;
+                Rect wa = SystemParameters.WorkArea;
+                Box p = Rules.DefaultPlacement(new Box(wa.X, wa.Y, wa.Width, wa.Height), CardView.CardWidth, CardView.CardHeight(false), EdgeMargin);
+                Left = p.X;
+                Top = p.Y;
+            }));
+        }
+
         private void Place(AppSettings s)
         {
-            double scale = SystemDpiScale();
-            var areas = new List<Box>();
-            foreach (System.Windows.Forms.Screen screen in System.Windows.Forms.Screen.AllScreens)
-            {
-                System.Drawing.Rectangle r = screen.WorkingArea;
-                areas.Add(new Box(r.X / scale, r.Y / scale, r.Width / scale, r.Height / scale));
-            }
             var saved = new Box(s.X ?? 0, s.Y ?? 0, CardView.CardWidth, CardView.CardHeight(false));
-            if (s.X.HasValue && s.Y.HasValue && Rules.IsMostlyOnScreen(saved, areas))
+            if (s.X.HasValue && s.Y.HasValue && Rules.IsMostlyOnScreen(saved, WorkAreas()))
             {
                 Left = s.X.Value;
                 Top = s.Y.Value;

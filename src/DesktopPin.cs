@@ -31,6 +31,11 @@ namespace DesktopMonitor
 
         public IntPtr Host { get { return _host; } }
 
+        public void Stop()
+        {
+            _watchdog.Stop();
+        }
+
         public void Attach()
         {
             if (_useOwner)
