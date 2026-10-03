@@ -134,5 +134,61 @@ namespace DesktopMonitor
         {
             return new Box(workArea.X + workArea.W - cardW - margin, workArea.Y + margin, cardW, cardH);
         }
+
+        // Details panel beside the card: left of it when there is room, otherwise right of it, top-aligned with the card,
+        // and always kept inside the work area.
+        public static Box PanelPlacement(Box card, Box workArea, double panelW, double panelH, double gap)
+        {
+            double x = card.X - gap - panelW >= workArea.X ? card.X - gap - panelW : card.X + card.W + gap;
+            x = Math.Max(workArea.X, Math.Min(x, workArea.X + workArea.W - panelW));
+            double y = Math.Max(workArea.Y, Math.Min(card.Y, workArea.Y + workArea.H - panelH));
+            return new Box(x, y, panelW, panelH);
+        }
+
+        // "Below full speed" for the CPU limit: under 99.5, i.e. it would display as under 100 %.
+        public static bool IsBelowFullSpeed(double limitPercent)
+        {
+            return limitPercent < 99.5;
+        }
+
+        public static string FormatCpuSpeed(double? limitPercent, string reason)
+        {
+            if (!limitPercent.HasValue) return "--";
+            return IsBelowFullSpeed(limitPercent.Value) ? "Limited to " + FormatPercent(limitPercent) + " \u00B7 " + reason : "Full speed";
+        }
+
+        // Whole GB below 1000 GB, otherwise TB with one decimal; 1 GB = 1024^3 bytes, as Explorer shows it.
+        public static string FormatDiskFree(double? freeBytes)
+        {
+            if (!freeBytes.HasValue) return "--";
+            double gb = freeBytes.Value / (1024.0 * 1024 * 1024);
+            if (Display(gb) < 1000) return Display(gb).ToString(CultureInfo.InvariantCulture) + " GB";
+            return (gb / 1024).ToString("0.0", CultureInfo.InvariantCulture) + " TB";
+        }
+
+        // Whole MB below 1000 MB, otherwise GB with one decimal.
+        public static string FormatMemory(long bytes)
+        {
+            double mb = bytes / (1024.0 * 1024);
+            if (Display(mb) < 1000) return Display(mb).ToString(CultureInfo.InvariantCulture) + " MB";
+            return (mb / 1024).ToString("0.0", CultureInfo.InvariantCulture) + " GB";
+        }
+
+        public static string FormatBattery(double? percent, bool onAc, bool charging, int? minutesLeft)
+        {
+            if (!percent.HasValue) return "--";
+            string pct = FormatPercent(percent);
+            if (onAc) return (charging ? "Charging \u00B7 " : "Plugged in \u00B7 ") + pct;
+            if (!minutesLeft.HasValue || minutesLeft.Value <= 0) return "On battery \u00B7 " + pct;
+            int h = minutesLeft.Value / 60, m = minutesLeft.Value % 60;
+            return (h > 0 ? h + " h " + m + " min left" : m + " min left") + " \u00B7 " + pct;
+        }
+
+        // 60 -> "1 min", 120 -> "2 min", 90 -> "90 s".
+        public static string FormatDuration(double seconds)
+        {
+            int s = (int)Display(seconds);
+            return s >= 60 && s % 60 == 0 ? (s / 60) + " min" : s + " s";
+        }
     }
 }
