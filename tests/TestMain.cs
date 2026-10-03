@@ -25,6 +25,7 @@ namespace DesktopMonitor.Tests
             SettingsV2Tests.Run();
             AlertEngineTests.Run();
             CsvLogTests.Run();
+            NetworkTests.Run();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
             return _failed == 0 ? 0 : 1;
         }
