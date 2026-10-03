@@ -20,6 +20,17 @@ namespace DesktopMonitor
         public double TempRingMin = 30, TempRingMax = 100;
         public string ZoneCpu = "CPUZ", ZoneSkin = "SK1Z", ZoneBattery = "BATZ";
 
+        // v2: CSV log (spec section 8) and alerts (spec section 7).
+        public bool LogEnabled = true;
+        public double LogIntervalSeconds = 10, LogRetentionDays = 30;
+        public bool AlertsEnabled = true;
+        public bool AlertCpuHotOn = true, AlertThrottledOn = true, AlertDiskLowOn = true, AlertBatteryLowOn = true, AlertBatteryHotOn = true, AlertComPortsOn = true;
+        public double AlertCpuTemp = 90, AlertCpuClear = 85, AlertCpuSeconds = 60;
+        public double AlertThrottleSeconds = 120;
+        public double AlertDiskFreeGb = 10, AlertDiskClearGb = 12;
+        public double AlertBatteryPercent = 20;
+        public double AlertBatteryTemp = 45, AlertBatteryTempClear = 42, AlertBatteryTempSeconds = 60;
+
         public AppSettings Clone()
         {
             return (AppSettings)MemberwiseClone();
@@ -73,6 +84,26 @@ namespace DesktopMonitor
             s.ZoneCpu = Text(map, "zoneCpu", d.ZoneCpu);
             s.ZoneSkin = Text(map, "zoneSkin", d.ZoneSkin);
             s.ZoneBattery = Text(map, "zoneBattery", d.ZoneBattery);
+            s.LogEnabled = Flag(map, "logEnabled", d.LogEnabled);
+            s.LogIntervalSeconds = Number(map, "logIntervalSeconds", d.LogIntervalSeconds, 5, 300);
+            s.LogRetentionDays = Number(map, "logRetentionDays", d.LogRetentionDays, 1, 365);
+            s.AlertsEnabled = Flag(map, "alertsEnabled", d.AlertsEnabled);
+            s.AlertCpuHotOn = Flag(map, "alertCpuHotOn", d.AlertCpuHotOn);
+            s.AlertThrottledOn = Flag(map, "alertThrottledOn", d.AlertThrottledOn);
+            s.AlertDiskLowOn = Flag(map, "alertDiskLowOn", d.AlertDiskLowOn);
+            s.AlertBatteryLowOn = Flag(map, "alertBatteryLowOn", d.AlertBatteryLowOn);
+            s.AlertBatteryHotOn = Flag(map, "alertBatteryHotOn", d.AlertBatteryHotOn);
+            s.AlertComPortsOn = Flag(map, "alertComPortsOn", d.AlertComPortsOn);
+            s.AlertCpuTemp = Number(map, "alertCpuTemp", d.AlertCpuTemp, 0, 150);
+            s.AlertCpuClear = Number(map, "alertCpuClear", d.AlertCpuClear, 0, 150);
+            s.AlertCpuSeconds = Number(map, "alertCpuSeconds", d.AlertCpuSeconds, 0, 3600);
+            s.AlertThrottleSeconds = Number(map, "alertThrottleSeconds", d.AlertThrottleSeconds, 0, 3600);
+            s.AlertDiskFreeGb = Number(map, "alertDiskFreeGb", d.AlertDiskFreeGb, 0, 100000);
+            s.AlertDiskClearGb = Number(map, "alertDiskClearGb", d.AlertDiskClearGb, 0, 100000);
+            s.AlertBatteryPercent = Number(map, "alertBatteryPercent", d.AlertBatteryPercent, 0, 100);
+            s.AlertBatteryTemp = Number(map, "alertBatteryTemp", d.AlertBatteryTemp, 0, 150);
+            s.AlertBatteryTempClear = Number(map, "alertBatteryTempClear", d.AlertBatteryTempClear, 0, 150);
+            s.AlertBatteryTempSeconds = Number(map, "alertBatteryTempSeconds", d.AlertBatteryTempSeconds, 0, 3600);
             return s;
         }
 
@@ -94,7 +125,27 @@ namespace DesktopMonitor
             sb.Append("  \"tempRingMax\": ").Append(Num(s.TempRingMax)).Append(",\r\n");
             sb.Append("  \"zoneCpu\": ").Append(js.Serialize(s.ZoneCpu)).Append(",\r\n");
             sb.Append("  \"zoneSkin\": ").Append(js.Serialize(s.ZoneSkin)).Append(",\r\n");
-            sb.Append("  \"zoneBattery\": ").Append(js.Serialize(s.ZoneBattery)).Append("\r\n");
+            sb.Append("  \"zoneBattery\": ").Append(js.Serialize(s.ZoneBattery)).Append(",\r\n");
+            sb.Append("  \"logEnabled\": ").Append(Bool(s.LogEnabled)).Append(",\r\n");
+            sb.Append("  \"logIntervalSeconds\": ").Append(Num(s.LogIntervalSeconds)).Append(",\r\n");
+            sb.Append("  \"logRetentionDays\": ").Append(Num(s.LogRetentionDays)).Append(",\r\n");
+            sb.Append("  \"alertsEnabled\": ").Append(Bool(s.AlertsEnabled)).Append(",\r\n");
+            sb.Append("  \"alertCpuHotOn\": ").Append(Bool(s.AlertCpuHotOn)).Append(",\r\n");
+            sb.Append("  \"alertThrottledOn\": ").Append(Bool(s.AlertThrottledOn)).Append(",\r\n");
+            sb.Append("  \"alertDiskLowOn\": ").Append(Bool(s.AlertDiskLowOn)).Append(",\r\n");
+            sb.Append("  \"alertBatteryLowOn\": ").Append(Bool(s.AlertBatteryLowOn)).Append(",\r\n");
+            sb.Append("  \"alertBatteryHotOn\": ").Append(Bool(s.AlertBatteryHotOn)).Append(",\r\n");
+            sb.Append("  \"alertComPortsOn\": ").Append(Bool(s.AlertComPortsOn)).Append(",\r\n");
+            sb.Append("  \"alertCpuTemp\": ").Append(Num(s.AlertCpuTemp)).Append(",\r\n");
+            sb.Append("  \"alertCpuClear\": ").Append(Num(s.AlertCpuClear)).Append(",\r\n");
+            sb.Append("  \"alertCpuSeconds\": ").Append(Num(s.AlertCpuSeconds)).Append(",\r\n");
+            sb.Append("  \"alertThrottleSeconds\": ").Append(Num(s.AlertThrottleSeconds)).Append(",\r\n");
+            sb.Append("  \"alertDiskFreeGb\": ").Append(Num(s.AlertDiskFreeGb)).Append(",\r\n");
+            sb.Append("  \"alertDiskClearGb\": ").Append(Num(s.AlertDiskClearGb)).Append(",\r\n");
+            sb.Append("  \"alertBatteryPercent\": ").Append(Num(s.AlertBatteryPercent)).Append(",\r\n");
+            sb.Append("  \"alertBatteryTemp\": ").Append(Num(s.AlertBatteryTemp)).Append(",\r\n");
+            sb.Append("  \"alertBatteryTempClear\": ").Append(Num(s.AlertBatteryTempClear)).Append(",\r\n");
+            sb.Append("  \"alertBatteryTempSeconds\": ").Append(Num(s.AlertBatteryTempSeconds)).Append("\r\n");
             sb.Append("}\r\n");
             return sb.ToString();
         }
@@ -146,6 +197,18 @@ namespace DesktopMonitor
             if (!map.TryGetValue(key, out v)) return fallback;
             var s = v as string;
             return string.IsNullOrWhiteSpace(s) ? fallback : s.Trim();
+        }
+
+        // JSON true/false only; anything else (a string "yes", a number) keeps the default.
+        private static bool Flag(Dictionary<string, object> map, string key, bool fallback)
+        {
+            object v;
+            return map.TryGetValue(key, out v) && v is bool ? (bool)v : fallback;
+        }
+
+        private static string Bool(bool v)
+        {
+            return v ? "true" : "false";
         }
 
         private static bool IsNumber(object v)

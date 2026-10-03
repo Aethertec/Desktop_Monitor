@@ -22,6 +22,8 @@ namespace DesktopMonitor.Tests
             RulesV2Tests.Run();
             ProcessTableTests.Run();
             ComPortsTests.Run();
+            SettingsV2Tests.Run();
+            AlertEngineTests.Run();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
             return _failed == 0 ? 0 : 1;
         }

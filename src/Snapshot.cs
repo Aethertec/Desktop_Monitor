@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace DesktopMonitor
 {
@@ -11,12 +12,19 @@ namespace DesktopMonitor
         public double? RamPercent;
         public double? GpuPercent;
         public double? DiskPercent;
+        public double? DiskFreeBytes;
         public double? DownBytesPerSec;
         public double? UpBytesPerSec;
         public double? BatteryPercent;
         public bool OnAc;
+        public bool Charging;
+        public int? BatteryMinutesLeft;
         public double? CpuTempC;
         public double? SkinTempC;
         public double? BatteryTempC;
+        public double? CpuLimitPercent;
+        public bool Throttled;
+        public List<AppUsage> TopApps = new List<AppUsage>();       // up to 5, highest CPU first
+        public List<ComPortInfo> ComPorts = new List<ComPortInfo>(); // natural port order
     }
 }
