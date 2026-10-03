@@ -1,7 +1,7 @@
 # Desktop Monitor v2 — design spec
 
 Date: 2026-10-03
-Status: approved 2026-10-03
+Status: implemented 2026-10-03 (see spike/POWER-RESULT.md for the power switch)
 Builds on: `2026-10-02-desktop-monitor-design.md` (v1). Everything in v1 stays unless this document changes it.
 
 ## 1. Goal
