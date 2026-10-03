@@ -174,6 +174,11 @@ namespace DesktopMonitor
             return (mb / 1024).ToString("0.0", CultureInfo.InvariantCulture) + " GB";
         }
 
+        public static string FormatTopApp(AppUsage app)
+        {
+            return app == null ? "--" : app.Name + " \u00B7 " + FormatPercent(app.CpuPercent) + " CPU \u00B7 " + FormatMemory(app.PrivateBytes);
+        }
+
         public static string FormatBattery(double? percent, bool onAc, bool charging, int? minutesLeft)
         {
             if (!percent.HasValue) return "--";

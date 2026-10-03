@@ -20,6 +20,7 @@ namespace DesktopMonitor.Tests
             PowerModeTests.Run();
             HistoryThrottleTests.Run();
             RulesV2Tests.Run();
+            ProcessTableTests.Run();
             Console.WriteLine(_passed + " passed, " + _failed + " failed");
             return _failed == 0 ? 0 : 1;
         }
