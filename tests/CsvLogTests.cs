@@ -19,6 +19,51 @@ namespace DesktopMonitor.Tests
             Writer_WritesTheHeaderOnce();
             Writer_KeepsRowsWhileTheFileIsLocked();
             Writer_MarksNewFilesAsUtf8ForExcel();
+            Writer_RowsQueuedBeforeMidnightStillArrive();
+            Writer_QueuedAlertRowArrivesWithTheNextLogRow();
+        }
+
+        // Final review I1: a row queued while today's file was locked must still reach it after midnight,
+        // when every later row goes to the next day's file.
+        private static void Writer_RowsQueuedBeforeMidnightStillArrive()
+        {
+            string dir = TempDir();
+            var late = new DateTime(2026, 10, 3, 23, 59, 40);
+            string day1 = Path.Combine(dir, "2026-10-03.csv");
+            try
+            {
+                var writer = new CsvLogWriter(dir);
+                writer.Append(late, "a", 30);
+                using (new FileStream(day1, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    writer.Append(late.AddSeconds(10), "b", 30); // locked: queued
+                writer.Append(late.AddSeconds(20), "c", 30);     // 00:00:00, next day's file
+                string[] lines = File.ReadAllLines(day1);
+                TestMain.Equal("a|b", string.Join("|", lines, 1, lines.Length - 1), "the queued row reached the day it belongs to");
+            }
+            finally
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
+
+        // Final review I1: an alert row queued while alerts.csv was locked must not wait for the next alert.
+        private static void Writer_QueuedAlertRowArrivesWithTheNextLogRow()
+        {
+            string dir = TempDir();
+            string alerts = Path.Combine(dir, "alerts.csv");
+            try
+            {
+                var writer = new CsvLogWriter(dir);
+                writer.AppendAlert(new Alert { Time = T0, Kind = "cpu_hot", Title = "CPU hot", Body = "first" });
+                using (new FileStream(alerts, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    writer.AppendAlert(new Alert { Time = T0.AddMinutes(1), Kind = "disk_low", Title = "Disk low", Body = "while locked" });
+                writer.Append(T0.AddMinutes(2), "row", 30);
+                TestMain.True(File.ReadAllText(alerts).Contains("while locked"), "the queued alert arrived with the next log row");
+            }
+            finally
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
         }
 
         private static Snapshot S(DateTime t, double cpu, double temp)
@@ -138,13 +183,13 @@ namespace DesktopMonitor.Tests
             try
             {
                 var writer = new CsvLogWriter(dir);
-                writer.AppendAlert(new Alert { Time = T0, Kind = "cpu_hot", Title = "CPU hot", Body = "95°C for 1 min" });
-                writer.AppendAlert(new Alert { Time = T0.AddMinutes(5), Kind = "cpu_hot", Title = "CPU hot", Body = "96°C for 1 min" });
+                writer.AppendAlert(new Alert { Time = T0, Kind = "cpu_hot", Title = "CPU hot", Body = "95\u00B0C for 1 min" });
+                writer.AppendAlert(new Alert { Time = T0.AddMinutes(5), Kind = "cpu_hot", Title = "CPU hot", Body = "96\u00B0C for 1 min" });
                 byte[] bytes = File.ReadAllBytes(Path.Combine(dir, "alerts.csv"));
                 TestMain.True(bytes.Length > 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF, "alerts.csv starts with the UTF-8 BOM");
                 string text = System.Text.Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
-                TestMain.True(text.IndexOf('﻿') < 0, "the BOM is written once, not before every row");
-                TestMain.True(text.Contains("95°C") && text.Contains("96°C"), "the degree sign survives");
+                TestMain.True(text.IndexOf('\uFEFF') < 0, "the BOM is written once, not before every row");
+                TestMain.True(text.Contains("95\u00B0C") && text.Contains("96\u00B0C"), "the degree sign survives");
             }
             finally
             {

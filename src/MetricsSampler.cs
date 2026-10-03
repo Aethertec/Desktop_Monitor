@@ -41,9 +41,19 @@ namespace DesktopMonitor
 
         private readonly ComPortTracker _comTracker = new ComPortTracker();
         private List<ComPortInfo> _comPorts = new List<ComPortInfo>();
-        private volatile Dictionary<string, string> _comNames; // latest finished WMI lookup
-        private string _lookupFor;
+        private static readonly TimeSpan LookupRetryAfter = TimeSpan.FromSeconds(30);
+        private volatile NameLookup _lookupDone;  // latest successful WMI lookup, handed over by the thread pool
+        private NameLookup _lookupApplied;
+        private string _lookupFor;                // port set of the lookup that is running or last started
+        private long _lookupStartedTicks, _lookupFailedTicks;
         private int _lookupBusy;
+
+        // A finished name lookup: the names it found and the ports it covered.
+        private sealed class NameLookup
+        {
+            public Dictionary<string, string> Names;
+            public List<string> Ports;
+        }
 
         public MetricsSampler(AppSettings settings)
         {
@@ -86,6 +96,7 @@ namespace DesktopMonitor
                 _throttle.Feed(_cpuLimit);
             }
             if (Due(ref _comAt, now, ComEvery)) ReadComPorts(wall);
+            else ApplyFinishedLookup(wall);
             if (Due(ref _processAt, now, ProcessEvery)) ReadProcesses(now);
             if (Due(ref _batteryAt, now, BatteryEvery)) ReadBattery();
             if (Due(ref _diskAt, now, DiskEvery)) _disk = Read("disk", ReadDisk, null);
@@ -340,17 +351,14 @@ namespace DesktopMonitor
             {
                 List<string> ports = ComPortReader.ReadPorts();
                 _comTracker.Update(ports, now);
-                Dictionary<string, string> names = _comNames;
-                bool missing = false;
-                foreach (string port in ports)
-                {
-                    string name;
-                    if (names != null && names.TryGetValue(port, out name)) _comTracker.SetName(port, name);
-                    else missing = true;
-                }
+                NameLookup done = _lookupDone;
+                if (done != null) _comTracker.ApplyNames(done.Names, done.Ports); // also renames a replugged port at once
+                bool missing = _comTracker.Current(now).Exists(p => p.Name == null);
                 ports.Sort(ComPortTracker.ComparePorts);
                 string key = string.Join(",", ports);
-                if (missing && key != _lookupFor) StartNameLookup(key);
+                long failedAt = Interlocked.Read(ref _lookupFailedTicks);
+                bool retryDue = failedAt > _lookupStartedTicks && DateTime.Now.Ticks - failedAt >= LookupRetryAfter.Ticks;
+                if (missing && (key != _lookupFor || retryDue)) StartNameLookup(key, ports);
                 _comPorts = _comTracker.Current(now);
                 Ok("com");
             }
@@ -360,18 +368,31 @@ namespace DesktopMonitor
             }
         }
 
-        private void StartNameLookup(string key)
+        // Every tick, not only on the 2 s poll: a lookup that has just finished shows its names within a second.
+        private void ApplyFinishedLookup(DateTime now)
+        {
+            NameLookup done = _lookupDone;
+            if (done == null || ReferenceEquals(done, _lookupApplied)) return;
+            _lookupApplied = done;
+            _comTracker.ApplyNames(done.Names, done.Ports);
+            _comPorts = _comTracker.Current(now);
+        }
+
+        private void StartNameLookup(string key, List<string> ports)
         {
             if (Interlocked.CompareExchange(ref _lookupBusy, 1, 0) != 0) return;
             _lookupFor = key;
+            _lookupStartedTicks = DateTime.Now.Ticks;
+            var covered = new List<string>(ports);
             ThreadPool.QueueUserWorkItem(delegate
             {
                 try
                 {
-                    _comNames = ComPortReader.ReadFriendlyNames();
+                    _lookupDone = new NameLookup { Names = ComPortReader.ReadFriendlyNames(), Ports = covered };
                 }
                 catch (Exception ex)
                 {
+                    Interlocked.Exchange(ref _lookupFailedTicks, DateTime.Now.Ticks); // retried after LookupRetryAfter
                     Log.Write("Metrics: COM port names unavailable, " + ex.Message);
                 }
                 finally

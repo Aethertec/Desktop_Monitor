@@ -148,8 +148,8 @@ namespace DesktopMonitor
     {
         private const int MaxPending = 8640;
         private readonly string _dir;
-        private readonly Dictionary<string, List<string>> _pending = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        private string _failingPath;
+        private readonly Dictionary<string, Pending> _pending = new Dictionary<string, Pending>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _failing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private DateTime _prunedFor = DateTime.MinValue;
 
         public CsvLogWriter(string dir)
@@ -189,31 +189,49 @@ namespace DesktopMonitor
             }
         }
 
+        // Rows waiting for one file, with the header that file starts with.
+        private sealed class Pending
+        {
+            public string Header;
+            public readonly List<string> Rows = new List<string>();
+        }
+
+        // Queues the row, then tries every file that has rows waiting (oldest first), so a row held while a file was
+        // locked arrives as soon as that file can be written, even when later rows go to another file (next day, alerts).
         private void Write(string path, string header, string row)
         {
-            List<string> queue;
+            Pending queue;
             if (!_pending.TryGetValue(path, out queue))
             {
-                queue = new List<string>();
+                queue = new Pending { Header = header };
                 _pending[path] = queue;
             }
-            queue.Add(row);
-            if (queue.Count > MaxPending) queue.RemoveRange(0, queue.Count - MaxPending);
+            queue.Rows.Add(row);
+            if (queue.Rows.Count > MaxPending) queue.Rows.RemoveRange(0, queue.Rows.Count - MaxPending);
+            var done = new List<string>();
+            foreach (KeyValuePair<string, Pending> p in _pending)
+                if (Flush(p.Key, p.Value)) done.Add(p.Key);
+            foreach (string d in done) _pending.Remove(d);
+        }
+
+        private bool Flush(string path, Pending queue)
+        {
+            if (queue.Rows.Count == 0) return true;
             try
             {
                 Directory.CreateDirectory(_dir);
                 var text = new StringBuilder();
-                if (!File.Exists(path)) text.Append('﻿').Append(header).Append("\r\n"); // BOM: Excel then reads it as UTF-8
-                foreach (string r in queue) text.Append(r).Append("\r\n");
+                if (!File.Exists(path)) text.Append('\uFEFF').Append(queue.Header).Append("\r\n"); // BOM: Excel then reads it as UTF-8
+                foreach (string r in queue.Rows) text.Append(r).Append("\r\n");
                 File.AppendAllText(path, text.ToString(), new UTF8Encoding(false));
-                queue.Clear();
-                if (_failingPath == path) Log.Write("CSV log: writing " + Path.GetFileName(path) + " again");
-                _failingPath = null;
+                queue.Rows.Clear();
+                if (_failing.Remove(path)) Log.Write("CSV log: writing " + Path.GetFileName(path) + " again");
+                return true;
             }
             catch (Exception ex)
             {
-                if (_failingPath != path) Log.Write("CSV log: cannot write " + Path.GetFileName(path) + " (" + ex.Message + "), keeping rows until it can");
-                _failingPath = path;
+                if (_failing.Add(path)) Log.Write("CSV log: cannot write " + Path.GetFileName(path) + " (" + ex.Message + "), keeping rows until it can");
+                return false;
             }
         }
     }

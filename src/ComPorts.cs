@@ -47,6 +47,19 @@ namespace DesktopMonitor
             if (_ports.TryGetValue(port, out info)) info.Name = name;
         }
 
+        // Applies a finished name lookup that covered `lookedUp`: found names are set, and covered ports without a name
+        // become "" (unnamed) instead of staying pending. Ports the lookup did not cover are left alone.
+        public void ApplyNames(IDictionary<string, string> names, IEnumerable<string> lookedUp)
+        {
+            foreach (string port in lookedUp)
+            {
+                ComPortInfo info;
+                if (!_ports.TryGetValue(port, out info)) continue;
+                string name;
+                info.Name = names != null && names.TryGetValue(port, out name) ? name : "";
+            }
+        }
+
         // A copy of the current ports in natural order (COM3 before COM10), with IsNew worked out for `now`.
         public List<ComPortInfo> Current(DateTime now)
         {
@@ -96,14 +109,17 @@ namespace DesktopMonitor
         {
             var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             using (var searcher = new ManagementObjectSearcher("SELECT Name FROM Win32_PnPEntity WHERE Name LIKE '%(COM%'"))
-            using (ManagementObjectCollection results = searcher.Get())
             {
-                foreach (ManagementBaseObject o in results)
+                searcher.Options.Timeout = TimeSpan.FromSeconds(10); // a hung WMI must not block every later lookup
+                using (ManagementObjectCollection results = searcher.Get())
                 {
-                    var name = o["Name"] as string;
-                    Match m = name == null ? Match.Empty : PortInName.Match(name);
-                    if (m.Success) names[m.Groups[2].Value] = m.Groups[1].Value;
-                    o.Dispose();
+                    foreach (ManagementBaseObject o in results)
+                    {
+                        var name = o["Name"] as string;
+                        Match m = name == null ? Match.Empty : PortInName.Match(name);
+                        if (m.Success) names[m.Groups[2].Value] = m.Groups[1].Value;
+                        o.Dispose();
+                    }
                 }
             }
             return names;

@@ -20,6 +20,7 @@ namespace DesktopMonitor.Tests
             ComPort_PresentAtStartNeverAlerts();
             ComPort_WithName_AlertsOnce_AndAgainAfterReplug();
             ComPort_WithoutName_WaitsThreeSeconds();
+            ComPort_LookupFinishedWithoutName_AlertsAtOnce();
             Switches_TurnAlertsOff();
             Recent_IsTodayNewestFirstAtMostTen();
         }
@@ -177,6 +178,14 @@ namespace DesktopMonitor.Tests
             TestMain.Equal(0, Run(e, st, WithPorts(T0.AddSeconds(2), Port("COM7", null, T0, true))).Count, "waits for the name for up to 3 s");
             List<Alert> fired = Run(e, st, WithPorts(T0.AddSeconds(3), Port("COM7", null, T0, true)));
             TestMain.Equal("New serial device", fired.Count > 0 ? fired[0].Body : "(none)", "then alerts without a name");
+        }
+
+        // Final review M4: once the lookup has finished without a name (""), there is nothing to wait for.
+        private static void ComPort_LookupFinishedWithoutName_AlertsAtOnce()
+        {
+            var e = new AlertEngine();
+            List<Alert> fired = Run(e, new AppSettings(), WithPorts(T0, Port("COM9", "", T0, true)));
+            TestMain.Equal("New serial device", fired.Count > 0 ? fired[0].Body : "(none)", "alerts straight away, without a name");
         }
 
         private static void Switches_TurnAlertsOff()

@@ -15,6 +15,22 @@ namespace DesktopMonitor.Tests
             Ports_AreInNaturalOrder();
             Names_ShowUpOnceKnown();
             Reader_ListsPortsWithoutError();
+            ApplyNames_FillsNames_AndMarksUnnamedOnlyForPortsLookedUp();
+        }
+
+        // Final review M4: a finished lookup must end the "…" state for the ports it covered, but must not touch a port
+        // that appeared after it started (that one gets its own lookup).
+        private static void ApplyNames_FillsNames_AndMarksUnnamedOnlyForPortsLookedUp()
+        {
+            var t = new ComPortTracker();
+            t.Update(Ports("COM5", "COM7", "COM8"), T0);
+            var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            names["COM5"] = "Silicon Labs CP210x";
+            t.ApplyNames(names, Ports("COM5", "COM7"));
+            List<ComPortInfo> c = t.Current(T0);
+            TestMain.Equal("Silicon Labs CP210x", c[0].Name, "found name applied");
+            TestMain.Equal("", c[1].Name, "looked up but no name: marked unnamed, not pending");
+            TestMain.Equal<string>(null, c[2].Name, "not part of that lookup: still pending");
         }
 
         private static List<string> Ports(params string[] p)

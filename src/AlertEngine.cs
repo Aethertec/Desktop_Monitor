@@ -97,7 +97,7 @@ namespace DesktopMonitor
                 if (!port.AppearedLive || _comAlerted.Contains(port.Port)) continue;
                 if (port.Name == null && now - port.FirstSeen < ComNameWait) continue; // give the name lookup a moment
                 _comAlerted.Add(port.Port);
-                if (st.AlertComPortsOn) Add(fired, now, "com_port", port.Port + " connected", port.Name ?? "New serial device", Level.Ok);
+                if (st.AlertComPortsOn) Add(fired, now, "com_port", port.Port + " connected", string.IsNullOrEmpty(port.Name) ? "New serial device" : port.Name, Level.Ok);
             }
             _comAlerted.RemoveWhere(p => !present.Contains(p));
 

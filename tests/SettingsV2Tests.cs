@@ -7,6 +7,31 @@ namespace DesktopMonitor.Tests
         public static void Run()
         {
             SettingsV2_DefaultsAndParsing();
+            LoadOrCreate_UpgradesAV1FileOnce();
+        }
+
+        // Final review I2: a v1 settings.json (14 keys) must gain the v2 keys so they can be edited, keeping the user's values.
+        private static void LoadOrCreate_UpgradesAV1FileOnce()
+        {
+            string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "DesktopMonitorTests-" + Guid.NewGuid().ToString("N"));
+            string path = System.IO.Path.Combine(dir, "settings.json");
+            try
+            {
+                System.IO.Directory.CreateDirectory(dir);
+                System.IO.File.WriteAllText(path, @"{""x"": 1096, ""y"": 15, ""opacity"": 0.8, ""usageAmber"": 70, ""usageRed"": 85, ""tempAmber"": 80, ""tempRed"": 85,
+                    ""diskAmber"": 90, ""diskRed"": 95, ""tempRingMin"": 30, ""tempRingMax"": 100, ""zoneCpu"": ""CPUZ"", ""zoneSkin"": ""SK1Z"", ""zoneBattery"": ""BATZ""}");
+                AppSettings s = SettingsStore.LoadOrCreate(path);
+                string upgraded = System.IO.File.ReadAllText(path);
+                TestMain.True(upgraded.Contains("\"alertComPortsOn\"") && upgraded.Contains("\"logIntervalSeconds\""), "v2 keys were added to the file");
+                TestMain.Near(0.8, SettingsStore.Parse(upgraded).Opacity, "the user's own values are kept");
+                TestMain.Near(1096, s.X, "position kept");
+                SettingsStore.LoadOrCreate(path);
+                TestMain.Equal(upgraded, System.IO.File.ReadAllText(path), "a complete file is not rewritten again");
+            }
+            finally
+            {
+                if (System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, true);
+            }
         }
 
         private static void SettingsV2_DefaultsAndParsing()

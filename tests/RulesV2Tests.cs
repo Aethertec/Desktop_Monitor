@@ -14,6 +14,14 @@ namespace DesktopMonitor.Tests
             FormatMemory_MbAndGb();
             FormatBattery_Cases();
             FormatDuration_Cases();
+            ComPortLabel_Cases();
+        }
+
+        private static void ComPortLabel_Cases()
+        {
+            TestMain.Equal("\u2026", Rules.ComPortLabel(null), "lookup pending");
+            TestMain.Equal("Serial device", Rules.ComPortLabel(""), "lookup finished without a name");
+            TestMain.Equal("USB-SERIAL CH340", Rules.ComPortLabel("USB-SERIAL CH340"), "named");
         }
 
         private static void PanelPlacement_LeftRightAndClamp()

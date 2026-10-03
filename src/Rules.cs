@@ -189,6 +189,13 @@ namespace DesktopMonitor
             return (h > 0 ? h + " h " + m + " min left" : m + " min left") + " \u00B7 " + pct;
         }
 
+        // A COM port's device name: null while the lookup runs, "" when it finished without one.
+        public static string ComPortLabel(string name)
+        {
+            if (name == null) return "\u2026";
+            return name.Length == 0 ? "Serial device" : name;
+        }
+
         // 60 -> "1 min", 120 -> "2 min", 90 -> "90 s".
         public static string FormatDuration(double seconds)
         {

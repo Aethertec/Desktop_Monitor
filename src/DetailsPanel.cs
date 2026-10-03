@@ -140,7 +140,7 @@ namespace DesktopMonitor
             foreach (ComPortInfo port in s.ComPorts)
             {
                 if (dc != null && port.IsNew) dc.DrawRoundedRectangle(Palette.NewTint, null, new Rect(PadX - 4, y - 1, Inner + 8, RowH), 4, 4);
-                string name = (port.Name ?? "\u2026") + (port.IsNew ? " \u00B7 new" : "");
+                string name = Rules.ComPortLabel(port.Name) + (port.IsNew ? " \u00B7 new" : "");
                 string portName = port.Port;
                 y = RowClickableLabel(dc, y, IsCopied(portName) ? "Copied" : portName, _text.Fit(name, Inner - 60, 12), delegate { Raise(CopyRequested, portName); });
             }

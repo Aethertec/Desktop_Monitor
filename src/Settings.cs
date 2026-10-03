@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Web.Script.Serialization;
 
@@ -161,7 +162,10 @@ namespace DesktopMonitor
                     Save(path, defaults);
                     return defaults;
                 }
-                return Parse(File.ReadAllText(path));
+                string json = File.ReadAllText(path);
+                AppSettings s = Parse(json);
+                if (MissingAnyKey(json)) Save(path, s); // a file from an older version gains the new keys, values kept
+                return s;
             }
             catch (Exception ex)
             {
@@ -198,6 +202,19 @@ namespace DesktopMonitor
             var s = v as string;
             return string.IsNullOrWhiteSpace(s) ? fallback : s.Trim();
         }
+
+        // True when the (already valid) JSON lacks any key that ToJson writes, e.g. a v1 file without the alert and log keys.
+        private static bool MissingAnyKey(string json)
+        {
+            var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var raw = new JavaScriptSerializer().DeserializeObject(json) as Dictionary<string, object>;
+            if (raw != null) foreach (string key in raw.Keys) present.Add(key);
+            foreach (Match m in KeyName.Matches(ToJson(new AppSettings())))
+                if (!present.Contains(m.Groups[1].Value)) return true;
+            return false;
+        }
+
+        private static readonly Regex KeyName = new Regex(@"""(\w+)"":");
 
         // JSON true/false only; anything else (a string "yes", a number) keeps the default.
         private static bool Flag(Dictionary<string, object> map, string key, bool fallback)
