@@ -5,31 +5,45 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace DesktopMonitor
 {
-    // Reads every metric (spec section 4). Each reader is isolated: a failure is logged once, yields null
-    // until it recovers, and never escapes Sample().
+    // Reads every metric (v1 spec section 4, v2 spec section 5). Each reader is isolated: a failure is logged once,
+    // yields null until it recovers, and never escapes Sample(). Used from the sampler thread only.
     internal sealed class MetricsSampler : IDisposable
     {
         private const string ThermalCategory = "Thermal Zone Information";
-        private const double TempEvery = 2, BatteryEvery = 10, DiskEvery = 60; // seconds
+        private const double TempEvery = 2, ComEvery = 2, ProcessEvery = 3, BatteryEvery = 10, DiskEvery = 60; // seconds
 
         private readonly HashSet<string> _failing = new HashSet<string>();
         private readonly Stopwatch _clock = Stopwatch.StartNew();
         private AppSettings _settings;
 
-        private PerformanceCounter _cpu;
+        private PerformanceCounter _cpu, _limit;
         private Dictionary<string, CounterSample> _gpuPrev;
         private Dictionary<string, long> _rxPrev, _txPrev; // per adapter Id
         private double _netPrevAt = -1;
 
         private PerformanceCounter _tCpu, _tSkin, _tBattery;
         private bool _thermalOpen, _thermalTenths;
-        private double _tempAt = -1, _batteryAt = -1, _diskAt = -1;
-        private double? _cpuTemp, _skinTemp, _batteryTemp, _battery, _disk;
-        private bool _onAc;
+        private double _tempAt = -1, _comAt = -1, _processAt = -1, _batteryAt = -1, _diskAt = -1;
+        private double? _cpuTemp, _skinTemp, _batteryTemp, _battery, _disk, _diskFree, _cpuLimit;
+        private bool _onAc, _charging;
+        private int? _minutesLeft;
+        private readonly Throttle _throttle = new Throttle();
+
+        private ProcessReader _processReader;
+        private List<ProcessSample> _processPrev;
+        private double _processPrevAt;
+        private List<AppUsage> _topApps = new List<AppUsage>();
+
+        private readonly ComPortTracker _comTracker = new ComPortTracker();
+        private List<ComPortInfo> _comPorts = new List<ComPortInfo>();
+        private volatile Dictionary<string, string> _comNames; // latest finished WMI lookup
+        private string _lookupFor;
+        private int _lookupBusy;
 
         public MetricsSampler(AppSettings settings)
         {
@@ -47,9 +61,11 @@ namespace DesktopMonitor
         public void Reset()
         {
             CloseCpu();
+            CloseLimit();
             _gpuPrev = null;
             _netPrevAt = -1;
             CloseThermal();
+            _processPrev = null;
             _batteryAt = -1;
             _diskAt = -1;
         }
@@ -57,20 +73,35 @@ namespace DesktopMonitor
         public Snapshot Sample()
         {
             double now = _clock.Elapsed.TotalSeconds;
-            var s = new Snapshot();
+            DateTime wall = DateTime.Now;
+            var s = new Snapshot { Time = wall };
             s.CpuPercent = Read("cpu", ReadCpu, CloseCpu);
             s.RamPercent = Read("ram", ReadRam, null);
             s.GpuPercent = Read("gpu", ReadGpu, delegate { _gpuPrev = null; });
             ReadNetwork(s, now);
-            if (Due(ref _tempAt, now, TempEvery)) ReadTemps();
+            if (Due(ref _tempAt, now, TempEvery))
+            {
+                ReadTemps();
+                _cpuLimit = Read("limit", ReadLimit, CloseLimit);
+                _throttle.Feed(_cpuLimit);
+            }
+            if (Due(ref _comAt, now, ComEvery)) ReadComPorts(wall);
+            if (Due(ref _processAt, now, ProcessEvery)) ReadProcesses(now);
             if (Due(ref _batteryAt, now, BatteryEvery)) ReadBattery();
             if (Due(ref _diskAt, now, DiskEvery)) _disk = Read("disk", ReadDisk, null);
             s.CpuTempC = _cpuTemp;
             s.SkinTempC = _skinTemp;
             s.BatteryTempC = _batteryTemp;
+            s.CpuLimitPercent = _cpuLimit;
+            s.Throttled = _throttle.Shown;
             s.BatteryPercent = _battery;
             s.OnAc = _onAc;
+            s.Charging = _charging;
+            s.BatteryMinutesLeft = _minutesLeft;
             s.DiskPercent = _disk;
+            s.DiskFreeBytes = _diskFree;
+            s.TopApps = _topApps;
+            s.ComPorts = _comPorts;
             return s;
         }
 
@@ -122,6 +153,24 @@ namespace DesktopMonitor
         {
             if (_cpu != null) _cpu.Dispose();
             _cpu = null;
+        }
+
+        // 100 = full speed; lower while the CPU is held back by heat or power limits.
+        private double? ReadLimit()
+        {
+            if (_limit == null)
+            {
+                _limit = new PerformanceCounter("Processor Information", "% Performance Limit", "_Total", true);
+                _limit.NextValue(); // discard the first read, as for the other counters
+                return null;
+            }
+            return Rules.ClampPercent(_limit.NextValue());
+        }
+
+        private void CloseLimit()
+        {
+            if (_limit != null) _limit.Dispose();
+            _limit = null;
         }
 
         private static double? ReadRam()
@@ -241,25 +290,103 @@ namespace DesktopMonitor
                 PowerStatus p = SystemInformation.PowerStatus;
                 _battery = Rules.BatteryPercent(p.BatteryLifePercent);
                 _onAc = p.PowerLineStatus == PowerLineStatus.Online;
+                _charging = (p.BatteryChargeStatus & BatteryChargeStatus.Charging) != 0;
+                _minutesLeft = p.BatteryLifeRemaining > 0 ? p.BatteryLifeRemaining / 60 : (int?)null;
                 Ok("battery");
             }
             catch (Exception ex)
             {
                 Fail("battery", ex);
                 _battery = null;
+                _minutesLeft = null;
             }
         }
 
-        private static double? ReadDisk()
+        private double? ReadDisk()
         {
             var c = new DriveInfo("C");
+            _diskFree = c.TotalFreeSpace;
             return Rules.Percent(c.TotalSize - c.TotalFreeSpace, c.TotalSize);
+        }
+
+        private void ReadProcesses(double now)
+        {
+            try
+            {
+                if (_processReader == null) _processReader = new ProcessReader();
+                List<ProcessSample> current = _processReader.Read();
+                if (_processPrev != null)
+                {
+                    List<AppUsage> apps = ProcessTable.Compare(_processPrev, current, now - _processPrevAt, Environment.ProcessorCount);
+                    _topApps = apps.GetRange(0, Math.Min(5, apps.Count));
+                }
+                _processPrev = current;
+                _processPrevAt = now;
+                Ok("processes");
+            }
+            catch (Exception ex)
+            {
+                Fail("processes", ex);
+                _processPrev = null;
+                _topApps = new List<AppUsage>();
+            }
+        }
+
+        // The port list is cheap (registry); device names need WMI (about 1 s), so that runs on the thread pool
+        // whenever the set of ports changes and some of them have no name yet.
+        private void ReadComPorts(DateTime now)
+        {
+            try
+            {
+                List<string> ports = ComPortReader.ReadPorts();
+                _comTracker.Update(ports, now);
+                Dictionary<string, string> names = _comNames;
+                bool missing = false;
+                foreach (string port in ports)
+                {
+                    string name;
+                    if (names != null && names.TryGetValue(port, out name)) _comTracker.SetName(port, name);
+                    else missing = true;
+                }
+                ports.Sort(ComPortTracker.ComparePorts);
+                string key = string.Join(",", ports);
+                if (missing && key != _lookupFor) StartNameLookup(key);
+                _comPorts = _comTracker.Current(now);
+                Ok("com");
+            }
+            catch (Exception ex)
+            {
+                Fail("com", ex);
+            }
+        }
+
+        private void StartNameLookup(string key)
+        {
+            if (Interlocked.CompareExchange(ref _lookupBusy, 1, 0) != 0) return;
+            _lookupFor = key;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    _comNames = ComPortReader.ReadFriendlyNames();
+                }
+                catch (Exception ex)
+                {
+                    Log.Write("Metrics: COM port names unavailable, " + ex.Message);
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _lookupBusy, 0);
+                }
+            });
         }
 
         public void Dispose()
         {
             CloseCpu();
+            CloseLimit();
             CloseThermal();
+            if (_processReader != null) _processReader.Dispose();
         }
     }
 }
