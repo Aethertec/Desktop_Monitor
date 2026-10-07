@@ -203,7 +203,7 @@ namespace DesktopMonitor
                 if (fraction >= 0.999) dc.DrawEllipse(null, pen, center, RingRadius, RingRadius);
                 else dc.DrawGeometry(null, pen, Arc(center, RingRadius, fraction));
             }
-            FormattedText v = _text.Make(value, 13, Palette.Text);
+            FormattedText v = _text.Make(value, 13, level == Level.Unknown ? Palette.Label : Palette.Text); // "--" in the muted label colour
             dc.DrawText(v, new Point(cx - v.Width / 2, center.Y - v.Height / 2));
             _text.Centered(dc, label, 12, Palette.Label, cx, top + RingSize + 2);
         }

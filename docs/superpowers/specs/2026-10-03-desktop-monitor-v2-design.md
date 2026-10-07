@@ -167,4 +167,4 @@ Riskiest first:
 - Light theme, per-monitor DPI
 - Charts of the CSV log inside the app
 
-Still-deferred v1 minors (not in v2): ring "--" colour, spec example 79.9, NaN in settings, `FileSystemWatcher.Error` handling.
+The last v1 minors (ring "--" colour, spec example 79.9, NaN in settings, `FileSystemWatcher.Error` handling) were closed on 2026-10-08.

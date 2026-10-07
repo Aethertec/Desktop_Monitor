@@ -13,6 +13,7 @@ namespace DesktopMonitor.Tests
             Parse_DuplicateKeysDifferingInCase_LastWins();
             Parse_WrongTypeFallsBackToDefault();
             Parse_ClampsOutOfRangeNumbers();
+            Parse_NonFiniteNumbersFallBackToDefault();
             Parse_InvertedRingRangeUsesDefaults();
             Parse_MalformedJsonThrowsFormatException();
             ToJson_RoundTrips();
@@ -94,6 +95,16 @@ namespace DesktopMonitor.Tests
             TestMain.Equal<double?>(null, s.X, "non-numeric x");
             TestMain.Equal("CPUZ", s.ZoneCpu, "number where string expected");
             TestMain.Equal("SK1Z", s.ZoneSkin, "blank zone");
+        }
+
+        // JavaScriptSerializer accepts the bare literals NaN and Infinity; opacity NaN would make the card invisible.
+        private static void Parse_NonFiniteNumbersFallBackToDefault()
+        {
+            AppSettings s = SettingsStore.Parse(@"{""opacity"": NaN, ""usageRed"": Infinity, ""x"": NaN, ""y"": -Infinity}");
+            TestMain.Near(0.93, s.Opacity, "opacity NaN keeps default");
+            TestMain.Near(85, s.UsageRed, "usageRed Infinity keeps default");
+            TestMain.Equal<double?>(null, s.X, "x NaN is unset");
+            TestMain.Equal<double?>(null, s.Y, "y -Infinity is unset");
         }
 
         private static void Parse_ClampsOutOfRangeNumbers()

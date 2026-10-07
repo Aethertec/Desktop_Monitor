@@ -185,6 +185,7 @@ namespace DesktopMonitor
             object v;
             if (!map.TryGetValue(key, out v) || !IsNumber(v)) return fallback;
             double x = Convert.ToDouble(v, CultureInfo.InvariantCulture);
+            if (double.IsNaN(x) || double.IsInfinity(x)) return fallback;
             return x < min ? min : (x > max ? max : x);
         }
 
@@ -192,7 +193,8 @@ namespace DesktopMonitor
         {
             object v;
             if (!map.TryGetValue(key, out v) || !IsNumber(v)) return null;
-            return Convert.ToDouble(v, CultureInfo.InvariantCulture);
+            double x = Convert.ToDouble(v, CultureInfo.InvariantCulture);
+            return double.IsNaN(x) || double.IsInfinity(x) ? (double?)null : x;
         }
 
         private static string Text(Dictionary<string, object> map, string key, string fallback)
@@ -257,7 +259,25 @@ namespace DesktopMonitor
             _fsw.Changed += delegate { Kick(); };
             _fsw.Created += delegate { Kick(); };
             _fsw.Renamed += delegate { Kick(); };
+            _fsw.Error += OnWatcherError;
             _fsw.EnableRaisingEvents = true;
+        }
+
+        // A buffer overflow or a lost handle stops the watcher; restart it and reload in case a change was missed.
+        private void OnWatcherError(object sender, ErrorEventArgs e)
+        {
+            Exception ex = e.GetException();
+            Log.Write("Settings: watcher error, " + (ex != null ? ex.Message : "unknown") + "; restarting");
+            try
+            {
+                _fsw.EnableRaisingEvents = false;
+                _fsw.EnableRaisingEvents = true;
+                Kick();
+            }
+            catch (Exception restartEx) // the folder may be gone; settings stay as they are until the next start
+            {
+                Log.Write("Settings: watcher restart failed, " + restartEx.Message);
+            }
         }
 
         private void Kick()
